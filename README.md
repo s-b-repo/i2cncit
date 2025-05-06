@@ -13,6 +13,9 @@ This Command-and-Control (C2) server allows operators to:
 * Use `i2psnark` to fetch and seed peer `.txt` files containing IPs of bots.
 * Store all bot information in `bots.txt` automatically (from all peers).
 * Send commands to a specific bot or **broadcast** to all online bots.
+* it also talks to bots using icmp for stealth and evasion
+* comes with example bot
+
 
 This system requires **no registration**, has **no central authority**, and functions as a **decentralized, anonymous C2 federation** over the I2P network.
 
