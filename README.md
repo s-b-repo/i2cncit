@@ -231,11 +231,3 @@ They can then add it to their own `magnet_links.txt` and receive your bot list.
 This system is designed **strictly for educational use, authorized testing, or simulations**. Misuse for illegal botnet control is a crime in most jurisdictions.
 
 ---
-
-## 🧩 To Do / Optional Features
-
-* Add encryption/signature verification for commands.
-* Add an authentication mechanism (e.g., per bot token).
-* Add reply/report channel for bots.
-* Auto-generate `.torrent` files from CLI.
-
